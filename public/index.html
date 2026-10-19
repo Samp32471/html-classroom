@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HTML Classroom</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: #1e1e2e;
+  }
+  #topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    background: #181825;
+    color: #cdd6f4;
+    font-size: 14px;
+    border-bottom: 1px solid #313244;
+  }
+  #topbar input {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #45475a;
+    background: #313244;
+    color: #cdd6f4;
+    font-size: 13px;
+  }
+  #topbar button {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: none;
+    background: #89b4fa;
+    color: #1e1e2e;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #topbar button:hover { background: #74c7ec; }
+  #status { margin-left: auto; font-size: 12px; color: #a6adc8; }
+  #users { font-size: 12px; color: #a6e3a1; }
+  #main {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+  }
+  #editor-pane, #preview-pane {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    position: relative;
+  }
+  #editor-pane { border-right: 2px solid #313244; }
+  .CodeMirror {
+    height: 100% !important;
+    font-size: 15px;
+    font-family: 'Fira Code', 'Consolas', monospace;
+  }
+  #preview-pane iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: white;
+  }
+  .pane-label {
+    position: absolute;
+    top: 6px;
+    right: 10px;
+    font-size: 11px;
+    color: #6c7086;
+    z-index: 10;
+    pointer-events: none;
+    background: #181825cc;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  #join-overlay {
+    position: fixed;
+    inset: 0;
+    background: #1e1e2eee;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    color: #cdd6f4;
+    z-index: 100;
+  }
+  #join-overlay h1 { font-size: 24px; margin-bottom: 8px; }
+  #join-overlay input {
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid #45475a;
+    background: #313244;
+    color: #cdd6f4;
+    font-size: 15px;
+    width: 260px;
+  }
+  #join-overlay button {
+    padding: 10px 24px;
+    border-radius: 8px;
+    border: none;
+    background: #a6e3a1;
+    color: #1e1e2e;
+    font-weight: 700;
+    font-size: 15px;
+    cursor: pointer;
+  }
+  #join-overlay .hint { font-size: 12px; color: #6c7086; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<!-- Join Screen -->
+<div id="join-overlay">
+  <h1>💻 HTML Classroom</h1>
+  <input id="join-name" placeholder="Your name" autocomplete="off">
+  <input id="join-room" placeholder="Room code (e.g., class-101)" autocomplete="off">
+  <button id="join-btn">Join Class</button>
+  <div class="hint">Share the room code with your students</div>
+</div>
+
+<!-- Top Bar -->
+<div id="topbar" style="display:none">
+  <span>Room:</span>
+  <strong id="room-display"></strong>
+  <span id="users"></span>
+  <span id="status">Connecting…</span>
+</div>
+
+<!-- Main Editor + Preview -->
+<div id="main" style="display:none">
+  <div id="editor-pane">
+    <span class="pane-label">CODE</span>
+    <textarea id="code"></textarea>
+  </div>
+  <div id="preview-pane">
+    <span class="pane-label">LIVE PREVIEW</span>
+    <iframe id="preview" sandbox="allow-scripts allow-modals allow-forms"></iframe>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closetag.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const joinOverlay = document.getElementById('join-overlay');
+  const joinName = document.getElementById('join-name');
+  const joinRoom = document.getElementById('join-room');
+  const joinBtn = document.getElementById('join-btn');
+  const topbar = document.getElementById('topbar');
+  const main = document.getElementById('main');
+  const roomDisplay = document.getElementById('room-display');
+  const usersSpan = document.getElementById('users');
+  const statusSpan = document.getElementById('status');
+  const preview = document.getElementById('preview');
+
+  let socket = null;
+  let editor = null;
+  let roomId = null;
+  let applyingRemote = false;
+  let previewTimer = null;
+
+  // Pre-fill room from URL ?room=xxx
+  const urlRoom = new URLSearchParams(location.search).get('room');
+  if (urlRoom) joinRoom.value = urlRoom;
+
+  joinBtn.onclick = join;
+  joinRoom.addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
+  joinName.addEventListener('keydown', e => { if (e.key === 'Enter') joinRoom.focus(); });
+
+  function join() {
+    const name = joinName.value.trim() || 'Anonymous';
+    const room = joinRoom.value.trim();
+    if (!room) { joinRoom.focus(); return; }
+
+    roomId = room;
+    joinOverlay.style.display = 'none';
+    topbar.style.display = 'flex';
+    main.style.display = 'flex';
+    roomDisplay.textContent = room;
+
+    // Init CodeMirror
+    editor = CodeMirror.fromTextArea(document.getElementById('code'), {
+      mode: 'htmlmixed',
+      theme: 'dracula',
+      lineNumbers: true,
+      autoCloseTags: true,
+      indentUnit: 2,
+      tabSize: 2,
+      lineWrapping: true,
+    });
+
+    // Connect socket
+    socket = io();
+
+    socket.on('connect', () => {
+      statusSpan.textContent = '🟢 Connected';
+      socket.emit('join-room', { roomId, name });
+    });
+
+    socket.on('disconnect', () => {
+      statusSpan.textContent = '🔴 Disconnected';
+    });
+
+    socket.on('init', ({ code }) => {
+      applyingRemote = true;
+      editor.setValue(code);
+      applyingRemote = false;
+      updatePreview(code);
+    });
+
+    socket.on('code-update', (code) => {
+      if (applyingRemote) return;
+      // Preserve cursor position
+      const cursor = editor.getCursor();
+      applyingRemote = true;
+      editor.setValue(code);
+      editor.setCursor(cursor);
+      applyingRemote = false;
+      updatePreview(code);
+    });
+
+    socket.on('users', (users) => {
+      usersSpan.textContent = `👥 ${users.join(', ')}`;
+    });
+
+    // Local typing → broadcast
+    editor.on('change', () => {
+      if (applyingRemote) return;
+      const code = editor.getValue();
+      socket.emit('code-change', { roomId, code });
+      updatePreview(code);
+    });
+  }
+
+  // Debounced live preview update
+  function updatePreview(code) {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => {
+      preview.srcdoc = code;
+    }, 250);
+  }
+</script>
+</body>
+</html>
