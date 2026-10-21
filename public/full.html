@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Full Classroom: HTML / React / Node</title>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; background: #1e1e2e; overflow: hidden; }
+
+  #topbar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #181825; color: #cdd6f4; font-size: 13px; border-bottom: 1px solid #313244; flex-wrap: wrap; }
+  #topbar button { padding: 5px 12px; border-radius: 5px; border: none; background: #89b4fa; color: #1e1e2e; font-weight: 600; cursor: pointer; font-size: 12px; }
+  #topbar button.run { background: #a6e3a1; }
+  #topbar button.term { background: #f9e2af; }
+  #topbar button.notes { background: #cba6f7; }
+  #topbar button:hover { opacity: 0.9; }
+  #topbar button:disabled { opacity: 0.5; cursor: not-allowed; }
+  #status { margin-left: auto; font-size: 11px; color: #a6adc8; }
+
+  #main { flex: 1; display: flex; min-height: 0; }
+
+  #explorer { width: 220px; background: #181825; border-right: 1px solid #313244; display: flex; flex-direction: column; }
+  #explorer-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #313244; font-size: 11px; color: #a6adc8; text-transform: uppercase; letter-spacing: 0.5px; }
+  #explorer-header button { background: none; border: none; color: #89b4fa; font-size: 18px; cursor: pointer; line-height: 1; }
+  #file-tree { flex: 1; overflow-y: auto; padding: 4px 0; }
+  .tree-item { padding: 4px 12px; font-size: 13px; color: #cdd6f4; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tree-item:hover { background: #313244; }
+  .tree-item.active { background: #45475a; color: #89b4fa; }
+  .tree-item .icon { font-size: 12px; width: 16px; text-align: center; flex-shrink: 0; }
+
+  #editor-container { flex: 1; display: flex; flex-direction: column; min-width: 0; border-right: 2px solid #313244; }
+  #tabs { display: flex; background: #181825; border-bottom: 1px solid #313244; overflow-x: auto; }
+  .tab { padding: 6px 14px; font-size: 12px; color: #6c7086; background: #181825; border: none; border-right: 1px solid #313244; cursor: pointer; white-space: nowrap; }
+  .tab.active { color: #89b4fa; background: #1e1e2e; border-bottom: 2px solid #89b4fa; }
+  .tab .close { margin-left: 6px; color: #f38ba8; font-size: 14px; }
+  #editor-pane { flex: 1; overflow: hidden; position: relative; }
+  .CodeMirror { height: 100% !important; font-size: 14px; font-family: 'Fira Code', 'Consolas', monospace; }
+
+  #right-pane { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #right-tabs { display: flex; background: #181825; border-bottom: 1px solid #313244; }
+  .right-tab { flex: 1; padding: 8px; background: #181825; border: none; color: #6c7086; font-size: 12px; cursor: pointer; border-bottom: 2px solid transparent; }
+  .right-tab.active { color: #89b4fa; border-bottom-color: #89b4fa; background: #1e1e2e; }
+
+  .pane-content { display: none; flex: 1; overflow: hidden; position: relative; min-height: 0; }
+  .pane-content.active { display: flex; flex-direction: column; }
+
+  iframe { width: 100%; height: 100%; border: none; background: white; }
+  #output-text { flex: 1; margin: 0; padding: 12px; background: #11111b; color: #cdd6f4; font-family: monospace; font-size: 13px; overflow: auto; white-space: pre-wrap; }
+  #problems-list { flex: 1; padding: 12px; background: #11111b; color: #f38ba8; font-family: monospace; font-size: 13px; overflow: auto; white-space: pre-wrap; }
+  #terminal { width: 100%; height: 100%; padding: 6px; background: #11111b; }
+
+  #join-overlay { position: fixed; inset: 0; background: #1e1e2eee; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #cdd6f4; z-index: 100; }
+  #join-overlay input { padding: 10px 14px; border-radius: 8px; border: 1px solid #45475a; background: #313244; color: #cdd6f4; font-size: 15px; width: 260px; }
+  #join-overlay label { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #a6adc8; }
+  #join-overlay button { padding: 10px 24px; border-radius: 8px; border: none; background: #a6e3a1; color: #1e1e2e; font-weight: 700; font-size: 15px; cursor: pointer; }
+  #join-error { color: #f38ba8; font-size: 13px; min-height: 16px; }
+
+  #notes-panel { position: fixed; top: 0; left: 0; bottom: 0; width: 440px; max-width: 92vw; background: #181825; color: #cdd6f4; border-right: 2px solid #313244; display: flex; flex-direction: column; z-index: 60; box-shadow: 4px 0 24px rgba(0,0,0,0.5); }
+  #notes-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: #11111b; border-bottom: 1px solid #313244; font-size: 15px; }
+  #notes-header button { background: none; border: none; color: #cdd6f4; font-size: 18px; cursor: pointer; }
+  #notes-tabs { display: flex; border-bottom: 1px solid #313244; }
+  .notes-tab { flex: 1; padding: 10px; background: #181825; border: none; color: #6c7086; font-size: 12px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; }
+  .notes-tab.active { color: #89b4fa; border-bottom-color: #89b4fa; background: #1e1e2e; }
+  #notes-content { flex: 1; overflow-y: auto; padding: 16px; font-size: 13px; line-height: 1.6; }
+  .notes-section { display: none; }
+  .notes-section.active { display: block; }
+  .notes-section h2 { font-size: 18px; margin-bottom: 8px; color: #89b4fa; }
+  .notes-section h3 { font-size: 14px; margin: 16px 0 6px; color: #a6e3a1; }
+  .notes-section ul, .notes-section ol { padding-left: 20px; margin-bottom: 8px; }
+  .notes-section li { margin-bottom: 4px; }
+  .notes-section code { background: #313244; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+  .notes-section pre { background: #11111b; padding: 10px; border-radius: 6px; overflow-x: auto; margin: 8px 0; font-size: 12px; line-height: 1.4; }
+  .notes-section pre code { background: none; padding: 0; }
+  #notes-footer { padding: 12px 16px; border-top: 1px solid #313244; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #notes-share, #notes-download { padding: 8px 14px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 12px; }
+  #notes-share { background: #a6e3a1; color: #1e1e2e; }
+  #notes-download { background: #89b4fa; color: #1e1e2e; }
+  #notes-shared-badge { font-size: 12px; color: #a6e3a1; }
+  body.student-notes .notes-tab { pointer-events: none; opacity: 0.7; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="join-overlay">
+  <h1>&#128187; Full Classroom</h1>
+  <input id="join-name" placeholder="Your name" autocomplete="off">
+  <input id="join-room" placeholder="Room code" autocomplete="off">
+  <label><input type="checkbox" id="join-teacher"> I am the teacher</label>
+  <div id="join-pin-wrap" style="display:none; position:relative; width:260px;">
+    <input id="join-pin" type="password" placeholder="Teacher PIN" style="width:100%; padding-right:44px;" autocomplete="off">
+    <button type="button" id="join-pin-toggle" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:none; border:none; color:#89b4fa; cursor:pointer; font-size:12px;">Show</button>
+  </div>
+  <div id="join-error"></div>
+  <button id="join-btn">Join Class</button>
+</div>
+
+<div id="topbar" class="hidden">
+  <span>Room: <strong id="room-display"></strong></span>
+  <span id="users" style="font-size:11px; color:#a6e3a1;"></span>
+  <select id="mode-select" style="padding:5px; border-radius:5px; border:1px solid #45475a; background:#313244; color:#cdd6f4; font-size:12px;">
+    <option value="html">HTML/CSS</option>
+    <option value="react">React</option>
+    <option value="node">Node.js</option>
+  </select>
+  <button id="run-btn" class="run">&#9654; Run</button>
+  <button id="term-btn" class="term">&#9000; Terminal</button>
+  <button id="notes-btn" class="notes">&#128221; Notes</button>
+  <span id="status">Connecting&hellip;</span>
+</div>
+
+<div id="main" class="hidden">
+  <div id="explorer">
+    <div id="explorer-header"><span>Files</span><button id="new-file-btn" title="New file">+</button></div>
+    <div id="file-tree"></div>
+  </div>
+
+  <div id="editor-container">
+    <div id="tabs"></div>
+    <div id="editor-pane"><textarea id="code"></textarea></div>
+  </div>
+
+  <div id="right-pane">
+    <div id="right-tabs">
+      <button class="right-tab active" data-pane="preview">Preview</button>
+      <button class="right-tab" data-pane="output">Output</button>
+      <button class="right-tab" data-pane="problems">Problems</button>
+      <button class="right-tab" data-pane="terminal">Terminal</button>
+    </div>
+
+    <div id="pane-preview" class="pane-content active">
+      <iframe id="preview" sandbox="allow-scripts allow-modals allow-forms"></iframe>
+    </div>
+    <div id="pane-output" class="pane-content">
+      <pre id="output-text">Run code to see output here.</pre>
+    </div>
+    <div id="pane-problems" class="pane-content">
+      <div id="problems-list">No problems detected.</div>
+    </div>
+    <div id="pane-terminal" class="pane-content">
+      <div id="terminal"></div>
+    </div>
+  </div>
+</div>
+
+<div id="notes-panel" class="hidden">
+  <div id="notes-header"><strong>Teaching Notes</strong><button id="notes-close">&#10005;</button></div>
+  <div id="notes-tabs">
+    <button class="notes-tab active" data-tab="html">HTML/CSS/JS</button>
+    <button class="notes-tab" data-tab="react">React</button>
+    <button class="notes-tab" data-tab="node">Node.js</button>
+  </div>
+  <div id="notes-content">
+    <div class="notes-section active" id="notes-html">
+      <h2>HTML, CSS &amp; JavaScript</h2>
+      <p><em>Structure &rarr; Style &rarr; Interactivity.</em></p>
+      <h3>Level 1 &mdash; HTML</h3>
+      <pre><code>&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;&lt;title&gt;My Page&lt;/title&gt;&lt;/head&gt;
+&lt;body&gt;
+  &lt;header&gt;&lt;h1&gt;Welcome&lt;/h1&gt;&lt;/header&gt;
+  &lt;main&gt;&lt;p&gt;Content here.&lt;/p&gt;&lt;/main&gt;
+  &lt;footer&gt;&lt;p&gt;&amp;copy; 2026&lt;/p&gt;&lt;/footer&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+      <h3>Level 2 &mdash; Flexbox</h3>
+      <pre><code>.container { display: flex; gap: 12px; justify-content: space-between; }</code></pre>
+      <h3>Level 3 &mdash; fetch + async/await</h3>
+      <pre><code>async function load() {
+  const res = await fetch('https://jsonplaceholder.typicode.com/users/1');
+  const user = await res.json();
+  document.body.innerHTML = `&lt;h2&gt;${user.name}&lt;/h2&gt;`;
+}
+load();</code></pre>
+      <h3>Projects</h3>
+      <ol>
+        <li>Profile card with Flexbox.</li>
+        <li>Dark mode toggle.</li>
+        <li>Responsive navbar.</li>
+      </ol>
+    </div>
+
+    <div class="notes-section" id="notes-react">
+      <h2>React</h2>
+      <p><em>Components, state, and hooks.</em></p>
+      <h3>Level 1 &mdash; Components &amp; Props</h3>
+      <pre><code>function Welcome(props) {
+  return &lt;h1&gt;Hello, {props.name}!&lt;/h1&gt;;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(&lt;Welcome name="Alice" /&gt;);</code></pre>
+      <h3>Level 2 &mdash; useState</h3>
+      <pre><code>function Counter() {
+  const [count, setCount] = React.useState(0);
+  return &lt;button onClick={() =&gt; setCount(count + 1)}&gt;{count}&lt;/button&gt;;
+}</code></pre>
+      <h3>Level 3 &mdash; useEffect</h3>
+      <pre><code>React.useEffect(() =&gt; {
+  fetch('https://jsonplaceholder.typicode.com/users/1')
+    .then(r =&gt; r.json())
+    .then(setUser);
+}, []);</code></pre>
+      <h3>Projects</h3>
+      <ol>
+        <li>ReactFacts &mdash; static components.</li>
+        <li>Travel Journal &mdash; list rendering.</li>
+        <li>Tenzies &mdash; dice game with state.</li>
+      </ol>
+    </div>
+
+    <div class="notes-section" id="notes-node">
+      <h2>Node.js &amp; Express</h2>
+      <p><em>Server-side JavaScript.</em></p>
+      <h3>Level 1 &mdash; Node basics</h3>
+      <pre><code>console.log('Node version:', process.version);
+const fs = require('fs');
+fs.writeFileSync('test.txt', 'Hello!');</code></pre>
+      <h3>Level 2 &mdash; Express server</h3>
+      <pre><code>const express = require('express');
+const app = express();
+app.get('/', (req, res) =&gt; res.send('&lt;h1&gt;Hello&lt;/h1&gt;'));
+app.listen(3000);</code></pre>
+      <h3>Level 3 &mdash; REST API</h3>
+      <pre><code>router.get('/', (req, res) =&gt; res.json(notes));
+router.post('/', (req, res) =&gt; {
+  const note = { id: Date.now(), text: req.body.text };
+  notes.push(note);
+  res.status(201).json(note);
+});</code></pre>
+      <h3>Exercises</h3>
+      <ol>
+        <li>File logger with timestamps.</li>
+        <li>Express app with 3 routes.</li>
+        <li>Notes REST API.</li>
+      </ol>
+    </div>
+  </div>
+  <div id="notes-footer">
+    <button id="notes-share" class="hidden">Share to Students</button>
+    <button id="notes-download">Download .md</button>
+    <span id="notes-shared-badge" class="hidden">&#10003; Shared</span>
+  </div>
+</div>
+
+<!-- React/Babel are loaded only inside the preview iframe, not in this page -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/jsx/jsx.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closetag.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+  // ---------- DOM ----------
+  const joinOverlay = document.getElementById('join-overlay');
+  const joinName = document.getElementById('join-name');
+  const joinRoom = document.getElementById('join-room');
+  const joinTeacher = document.getElementById('join-teacher');
+  const joinPin = document.getElementById('join-pin');
+  const joinPinWrap = document.getElementById('join-pin-wrap');
+  const joinPinToggle = document.getElementById('join-pin-toggle');
+  const joinError = document.getElementById('join-error');
+  const joinBtn = document.getElementById('join-btn');
+  const topbar = document.getElementById('topbar');
+  const main = document.getElementById('main');
+  const roomDisplay = document.getElementById('room-display');
+  const usersSpan = document.getElementById('users');
+  const statusSpan = document.getElementById('status');
+  const modeSelect = document.getElementById('mode-select');
+  const runBtn = document.getElementById('run-btn');
+  const termBtn = document.getElementById('term-btn');
+  const notesBtn = document.getElementById('notes-btn');
+  const preview = document.getElementById('preview');
+  const outputText = document.getElementById('output-text');
+  const problemsList = document.getElementById('problems-list');
+  const fileTree = document.getElementById('file-tree');
+  const tabsEl = document.getElementById('tabs');
+  const newFileBtn = document.getElementById('new-file-btn');
+  const notesPanel = document.getElementById('notes-panel');
+  const notesClose = document.getElementById('notes-close');
+  const notesShare = document.getElementById('notes-share');
+  const notesDownload = document.getElementById('notes-download');
+  const notesSharedBadge = document.getElementById('notes-shared-badge');
+  const notesTabs = document.querySelectorAll('.notes-tab');
+  const notesSections = document.querySelectorAll('.notes-section');
+
+  // ---------- State ----------
+  let socket = null, editor = null, roomId = null;
+  let userName = 'Anonymous', userRole = 'student';
+  let applyingRemote = false, previewTimer = null, syncTimer = null;
+  let term = null, termWs = null, terminalToken = null;
+  let currentNotesTab = 'html', notesOpen = false;
+  let workspace = [], openTabs = [], activeFileId = null;
+
+  const DEFAULT_FILES = [
+    { id: 'index.html', name: 'index.html', type: 'file', parentId: null, content: '<!DOCTYPE html>\n<html>\n<head>\n  <title>Hello</title>\n</head>\n<body>\n  <h1>Hello, class!</h1>\n</body>\n</html>', language: 'html' },
+    { id: 'app.jsx', name: 'app.jsx', type: 'file', parentId: null, content: 'function App() {\n  return <h1>Hello React!</h1>;\n}\nReactDOM.createRoot(document.getElementById("root")).render(<App />);', language: 'react' },
+    { id: 'server.js', name: 'server.js', type: 'file', parentId: null, content: 'console.log("Hello from Node!");', language: 'node' },
+  ];
+
+  // ---------- Right pane tabs ----------
+  document.querySelectorAll('.right-tab').forEach(tab => {
+    tab.onclick = () => {
+      document.querySelectorAll('.right-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.pane-content').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('pane-' + tab.dataset.pane).classList.add('active');
+      if (tab.dataset.pane === 'terminal' && !term) initTerminal();
+    };
+  });
+
+  function showOutput(text) {
+    outputText.textContent = text;
+    document.querySelector('.right-tab[data-pane="output"]').click();
+  }
+  // Built with textContent (never innerHTML): the text can come from student code.
+  function showProblem(title, message, details) {
+    problemsList.textContent = '';
+    const t = document.createElement('div');
+    t.style.cssText = 'color:#f38ba8; font-weight:bold;';
+    t.textContent = String(title);
+    const m = document.createElement('div');
+    m.style.cssText = 'color:#cdd6f4; margin:8px 0;';
+    m.textContent = String(message);
+    const d = document.createElement('pre');
+    d.style.cssText = 'color:#a6adc8; font-size:12px; white-space:pre-wrap;';
+    d.textContent = String(details || '');
+    problemsList.append(t, m, d);
+    document.querySelector('.right-tab[data-pane="problems"]').click();
+  }
+  function clearProblems() { problemsList.textContent = 'No problems detected.'; }
+
+  // ---------- PIN toggle ----------
+  joinTeacher.onchange = () => { joinPinWrap.style.display = joinTeacher.checked ? 'block' : 'none'; joinError.textContent = ''; };
+  joinPinToggle.onclick = () => {
+    joinPin.type = joinPin.type === 'password' ? 'text' : 'password';
+    joinPinToggle.textContent = joinPin.type === 'password' ? 'Show' : 'Hide';
+    joinPin.focus();
+  };
+
+  // ---------- Syncing ----------
+  function syncWorkspaceNow() {
+    clearTimeout(syncTimer);
+    if (socket && roomId) socket.emit('workspace-change', { roomId, workspace });
+  }
+  function syncWorkspaceSoon() {
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(syncWorkspaceNow, 150);
+  }
+
+  // ---------- Join ----------
+  joinBtn.onclick = join;
+  joinRoom.addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
+  joinPin.addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
+
+  function join() {
+    userName = joinName.value.trim() || 'Anonymous';
+    const room = joinRoom.value.trim();
+    if (!room) { joinRoom.focus(); return; }
+    const role = joinTeacher.checked ? 'teacher' : 'student';
+    const pin = joinTeacher.checked ? joinPin.value : '';
+    if (role === 'teacher' && !pin) { joinError.textContent = 'Enter teacher PIN.'; return; }
+
+    joinError.textContent = '';
+    joinBtn.disabled = true; joinBtn.textContent = 'Joining…';
+    roomId = room; userRole = role;
+
+    if (!editor) {
+      editor = CodeMirror.fromTextArea(document.getElementById('code'), {
+        mode: 'htmlmixed', theme: 'dracula', lineNumbers: true, autoCloseTags: true, indentUnit: 2, tabSize: 2, lineWrapping: true,
+      });
+      editor.on('change', () => {
+        if (applyingRemote || !activeFileId) return;
+        const file = workspace.find(f => f.id === activeFileId);
+        if (file) { file.content = editor.getValue(); syncWorkspaceSoon(); }
+        refreshPreview();
+      });
+    }
+
+    if (!socket) {
+      socket = io();
+      socket.on('connect', () => {
+        statusSpan.textContent = '\u{1F7E2} Connected';
+        socket.emit('join-room', { roomId, name: userName, role, pin });
+      });
+      socket.on('connect_error', (err) => { joinError.textContent = 'Connection failed: ' + err.message; joinBtn.disabled = false; joinBtn.textContent = 'Join Class'; });
+      socket.on('join-error', ({ message }) => { joinError.textContent = message; joinBtn.disabled = false; joinBtn.textContent = 'Join Class'; });
+      socket.on('disconnect', () => { statusSpan.textContent = '\u{1F534} Disconnected'; });
+      socket.on('error-msg', (msg) => { statusSpan.textContent = String(msg); });
+      socket.on('terminal-token', (t) => { terminalToken = t; });
+
+      socket.on('init', ({ workspace: serverWorkspace }) => {
+        joinOverlay.classList.add('hidden'); topbar.classList.remove('hidden'); main.classList.remove('hidden');
+        roomDisplay.textContent = roomId; joinBtn.disabled = false; joinBtn.textContent = 'Join Class';
+
+        workspace = serverWorkspace && serverWorkspace.length ? serverWorkspace : DEFAULT_FILES.slice();
+        openTabs = openTabs.filter(id => workspace.some(f => f.id === id));
+        renderFileTree(); renderTabs();
+        const keep = activeFileId && workspace.some(f => f.id === activeFileId) ? activeFileId : null;
+        const defaultFile = (keep && workspace.find(f => f.id === keep)) || workspace.find(f => f.id === 'index.html') || workspace[0];
+        if (defaultFile) openFile(defaultFile.id);
+      });
+
+      socket.on('workspace-update', (ws) => {
+        workspace = ws;
+        renderFileTree();
+        const file = activeFileId && workspace.find(f => f.id === activeFileId);
+        // Only touch the editor if the text really changed, and keep the cursor/scroll position
+        if (file && file.content !== editor.getValue()) {
+          const cursor = editor.getCursor();
+          const scroll = editor.getScrollInfo();
+          applyingRemote = true;
+          editor.setValue(file.content);
+          editor.setCursor(cursor);
+          editor.scrollTo(scroll.left, scroll.top);
+          applyingRemote = false;
+        }
+        renderTabs();
+        refreshPreview();
+      });
+
+      socket.on('users', (users) => {
+        usersSpan.textContent = '\u{1F465} ' + users.map(u => `${u.name}${u.role === 'teacher' ? ' (T)' : ''}`).join(', ');
+      });
+
+      socket.on('notes-shared', ({ tab, open }) => {
+        if (!open) { notesOpen = false; notesPanel.classList.add('hidden'); return; }
+        notesOpen = true; notesPanel.classList.remove('hidden'); currentNotesTab = tab;
+        notesTabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+        notesSections.forEach(s => s.classList.toggle('active', s.id === 'notes-' + tab));
+        if (userRole === 'student') document.body.classList.add('student-notes');
+        notesSharedBadge.classList.remove('hidden');
+      });
+    } else {
+      socket.emit('join-room', { roomId, name: userName, role, pin });
+    }
+
+    if (role === 'teacher') { notesShare.classList.remove('hidden'); document.body.classList.remove('student-notes'); }
+    else { notesShare.classList.add('hidden'); document.body.classList.add('student-notes'); }
+
+    modeSelect.onchange = () => {
+      const mode = modeSelect.value;
+      const target = workspace.find(f => f.language === mode);
+      if (target) openFile(target.id); else refreshPreview();
+    };
+
+    runBtn.onclick = runCurrent;
+    termBtn.onclick = () => document.querySelector('.right-tab[data-pane="terminal"]').click();
+    notesBtn.onclick = toggleNotesPanel;
+  }
+
+  // ---------- File tree ----------
+  function renderFileTree() {
+    fileTree.textContent = '';
+    workspace.filter(f => !f.parentId).forEach(f => fileTree.appendChild(buildTreeItem(f)));
+  }
+  function buildTreeItem(file) {
+    const div = document.createElement('div');
+    div.className = 'tree-item' + (file.id === activeFileId ? ' active' : '');
+    const icon = document.createElement('span');
+    icon.className = 'icon';
+    icon.textContent = file.type === 'folder' ? '\u{1F4C1}' : '\u{1F4C4}';
+    div.append(icon, document.createTextNode(String(file.name)));
+    div.onclick = () => { if (file.type === 'file') openFile(file.id); };
+    return div;
+  }
+  function renderTabs() {
+    tabsEl.textContent = '';
+    openTabs.forEach(id => {
+      const file = workspace.find(f => f.id === id);
+      if (!file) return;
+      const btn = document.createElement('button');
+      btn.className = 'tab' + (id === activeFileId ? ' active' : '');
+      const close = document.createElement('span');
+      close.className = 'close';
+      close.textContent = '\u00d7';
+      btn.append(document.createTextNode(String(file.name) + ' '), close);
+      btn.onclick = () => openFile(id);
+      close.onclick = (e) => { e.stopPropagation(); closeTab(id); };
+      tabsEl.appendChild(btn);
+    });
+  }
+  function openFile(id) {
+    const file = workspace.find(f => f.id === id);
+    if (!file || file.type !== 'file') return;
+    activeFileId = id;
+    if (!openTabs.includes(id)) openTabs.push(id);
+    applyingRemote = true;
+    editor.setValue(file.content);
+    const modeMap = { html: 'htmlmixed', css: 'css', js: 'javascript', jsx: 'jsx', react: 'jsx', node: 'javascript' };
+    editor.setOption('mode', modeMap[file.language] || 'javascript');
+    applyingRemote = false;
+    renderFileTree(); renderTabs(); refreshPreview();
+  }
+  function closeTab(id) {
+    openTabs = openTabs.filter(t => t !== id);
+    if (activeFileId === id) {
+      activeFileId = openTabs[openTabs.length - 1] || null;
+      if (activeFileId) { openFile(activeFileId); return; }
+      applyingRemote = true; editor.setValue(''); applyingRemote = false;
+    }
+    renderFileTree(); renderTabs();
+  }
+  newFileBtn.onclick = () => {
+    const name = prompt('File name (e.g. style.css, utils.js):');
+    if (!name || !name.trim()) return;
+    const id = 'file-' + Date.now();
+    const ext = name.split('.').pop().toLowerCase();
+    const langMap = { html: 'html', css: 'css', js: 'js', jsx: 'react', json: 'js' };
+    workspace.push({ id, name: name.trim().slice(0, 100), type: 'file', parentId: null, content: '', language: langMap[ext] || 'js' });
+    syncWorkspaceNow();
+    renderFileTree(); openFile(id);
+  };
+
+  // ---------- Preview ----------
+  // String.replace() treats "$&", "$'" etc. in the replacement specially, so always use a function.
+  function injectBefore(html, marker, text, fallbackAppend) {
+    const i = html.indexOf(marker);
+    if (i === -1) return fallbackAppend ? html + text : text + html;
+    return html.slice(0, i) + text + html.slice(i);
+  }
+
+  function refreshPreview(immediate) {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => {
+      const mode = modeSelect.value;
+      let html = '';
+      if (mode === 'html') {
+        const htmlFile = workspace.find(f => f.language === 'html');
+        const cssFiles = workspace.filter(f => f.language === 'css');
+        const jsFiles = workspace.filter(f => f.language === 'js');
+        html = htmlFile ? htmlFile.content : '<p>No HTML file</p>';
+        if (cssFiles.length) html = injectBefore(html, '</head>', cssFiles.map(f => `<style>${f.content}</style>`).join(''), false);
+        if (jsFiles.length) html = injectBefore(html, '</body>', jsFiles.map(f => `<script>${f.content}<\/script>`).join(''), true);
+      } else if (mode === 'react') {
+        const jsx = workspace.find(f => f.language === 'react');
+        let clean = jsx ? jsx.content : '';
+        // Strip ALL import statements
+        clean = clean
+          .replace(/^\s*import\s+[\s\S]*?from\s+['"].*?['"];?\s*$/gm, '')
+          .replace(/^\s*import\s+['"].*?['"];?\s*$/gm, '');
+        html = `<!DOCTYPE html><html><head>
+          <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"><\/script>
+          <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.development.js"><\/script>
+          <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"><\/script>
+        </head><body><div id="root"></div>
+          <script type="text/babel" data-presets="react">${clean}<\/script>
+        </body></html>`;
+      } else {
+        html = '<body style="font-family:system-ui;padding:16px;color:#444">Node mode: press <b>Run</b> and see the Output tab.</body>';
+      }
+      const errorScript = `<script>
+        window.onerror = function(msg, url, line, col, err) {
+          parent.postMessage({ type: 'preview-error', message: String(msg), line: line, stack: err ? String(err.stack) : '' }, '*');
+        };
+        window.addEventListener('unhandledrejection', function(e) {
+          parent.postMessage({ type: 'preview-error', message: 'Unhandled rejection: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)), stack: e.reason && e.reason.stack ? String(e.reason.stack) : '' }, '*');
+        });
+      <\/script>`;
+      // Put the error handler first, even when the student's HTML has no <head>
+      const headIdx = html.indexOf('<head>');
+      html = headIdx === -1 ? errorScript + html : html.slice(0, headIdx + 6) + errorScript + html.slice(headIdx + 6);
+      preview.srcdoc = html;
+    }, immediate ? 0 : 300);
+  }
+
+  window.addEventListener('message', (e) => {
+    // Only accept messages from our own preview iframe
+    if (e.source !== preview.contentWindow) return;
+    if (e.data && e.data.type === 'preview-error') {
+      showProblem('Preview Error', e.data.message, (e.data.line ? 'Line ' + e.data.line + '\n' : '') + (e.data.stack || ''));
+    }
+  });
+
+  // ---------- Run ----------
+  // HTML/React: re-render the preview now. Node: execute in the sandbox.
+  function runCurrent() {
+    if (modeSelect.value === 'node') return runNode();
+    clearProblems();
+    refreshPreview(true);
+    document.querySelector('.right-tab[data-pane="preview"]').click();
+  }
+
+  // ---------- Run Node ----------
+  async function runNode() {
+    const file = workspace.find(f => f.id === activeFileId);
+    if (!file || !file.content.trim()) { showOutput('No code to run.'); return; }
+    showOutput('\u{23F3} Running…');
+    runBtn.disabled = true; clearProblems();
+
+    try {
+      const res = await fetch('/api/run-node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: file.content }),
+      });
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        const text = await res.text();
+        showOutput('Non-JSON response (status ' + res.status + '):\n' + text.slice(0, 500));
+        showProblem('Server Error', 'The /api/run-node endpoint did not return JSON. Make sure you opened this page from the classroom server and that it was restarted after editing server.js.', text.slice(0, 500));
+        return;
+      }
+      const data = await res.json();
+      if (!res.ok) {
+        showOutput('Error: ' + (data.error || 'Unknown') + '\n' + (data.details || ''));
+        showProblem('Execution Error', data.error || 'Unknown', data.details || '');
+      } else {
+        let out = '';
+        if (data.stdout) out += '--- STDOUT ---\n' + data.stdout + '\n';
+        if (data.stderr) out += '--- STDERR ---\n' + data.stderr + '\n';
+        if (!out) out = 'Program exited with code ' + (data.exitCode ?? 0);
+        showOutput(out);
+        if (data.stderr) showProblem('Runtime Error', 'Node exited with an error', data.stderr);
+      }
+    } catch (err) {
+      showOutput('Network error: ' + err.message);
+      showProblem('Network Error', err.message, '');
+    } finally {
+      runBtn.disabled = false;
+    }
+  }
+
+  // ---------- Terminal (teacher only) ----------
+  function initTerminal() {
+    term = new Terminal({ theme: { background: '#11111b', foreground: '#cdd6f4' }, fontSize: 13, fontFamily: 'Consolas, monospace', cursorBlink: true });
+    term.open(document.getElementById('terminal'));
+    if (userRole !== 'teacher' || !terminalToken) {
+      term.write('The terminal is available to the teacher only.\r\n');
+      return;
+    }
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    termWs = new WebSocket(`${proto}://${location.host}/terminal?token=${encodeURIComponent(terminalToken)}`);
+    termWs.onopen = () => {
+      term.write('Terminal connected.\r\n');
+      term.onData(d => { if (termWs.readyState === WebSocket.OPEN) termWs.send(d); });
+      termWs.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+    };
+    termWs.onmessage = ev => term.write(ev.data);
+    termWs.onclose = () => term.write('\r\n[disconnected]\r\n');
+    term.onResize(({ cols, rows }) => { if (termWs && termWs.readyState === WebSocket.OPEN) termWs.send(JSON.stringify({ type: 'resize', cols, rows })); });
+  }
+
+  // ---------- Notes ----------
+  function toggleNotesPanel() { notesOpen = !notesOpen; notesPanel.classList.toggle('hidden', !notesOpen); }
+  notesClose.onclick = () => { notesOpen = false; notesPanel.classList.add('hidden'); };
+  notesTabs.forEach(tab => tab.onclick = () => {
+    if (document.body.classList.contains('student-notes')) return;
+    const t = tab.dataset.tab; currentNotesTab = t;
+    notesTabs.forEach(x => x.classList.toggle('active', x.dataset.tab === t));
+    notesSections.forEach(s => s.classList.toggle('active', s.id === 'notes-' + t));
+  });
+  notesShare.onclick = () => {
+    if (!socket || !roomId || userRole !== 'teacher') return;
+    socket.emit('share-notes', { roomId, tab: currentNotesTab, open: true });
+    notesSharedBadge.classList.remove('hidden');
+  };
+  notesDownload.onclick = () => {
+    const active = document.querySelector('.notes-section.active'); if (!active) return;
+    let md = '';
+    active.childNodes.forEach(c => {
+      if (c.nodeType !== 1) return;
+      const t = c.tagName.toLowerCase();
+      if (t === 'h2') md += `\n# ${c.textContent}\n`;
+      else if (t === 'h3') md += `\n## ${c.textContent}\n`;
+      else if (t === 'p') md += `\n${c.textContent}\n`;
+      else if (t === 'pre') md += '\n```\n' + c.textContent + '\n```\n';
+      else if (t === 'ul') c.querySelectorAll(':scope > li').forEach(li => { md += `- ${li.textContent}\n`; });
+      else if (t === 'ol') c.querySelectorAll(':scope > li').forEach((li, i) => { md += `${i + 1}. ${li.textContent}\n`; });
+    });
+    const blob = new Blob([md], { type: 'text/markdown' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `notes-${currentNotesTab}.md`; a.click();
+    URL.revokeObjectURL(a.href);
+  };
+</script>
+</body>
+</html>

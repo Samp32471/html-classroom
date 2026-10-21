@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Environment secrets — NEVER commit
+.env
+.env.local
+.env.*.local
+
+# Hash generator (contains your plain PIN if you didn't delete it)
+hash.js
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/node_modules/
